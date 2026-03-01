@@ -1,73 +1,134 @@
 <!DOCTYPE html>
 <html lang="en">
 <head>
-    <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Game - Fixed</title>
-    <style>
-        body { margin: 0; overflow: hidden; background: #000; }
-        #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: sans-serif; pointer-events: none; }
-    </style>
+  <meta charset="UTF-8">
+  <title>Multiplayer Shooter Game</title>
+  <style>
+    body { font-family: sans-serif; text-align: center; margin: 0; background: #f0f0f0; }
+    canvas { background: #fff; display: block; margin: 20px auto; border: 2px solid #000; }
+    #authBox, #friendsBox { margin: 20px auto; padding: 10px; border: 1px solid #333; display: inline-block; background: #eee; }
+    input { margin: 5px; padding: 5px; }
+    button { margin: 5px; padding: 5px 10px; cursor: pointer; }
+  </style>
+  <!-- Firebase CDN -->
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-app-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-auth-compat.js"></script>
+  <script src="https://www.gstatic.com/firebasejs/9.23.0/firebase-firestore-compat.js"></script>
 </head>
 <body>
-    <div id="ui"><h1>Voxel Shooter</h1><p>Click to start | WASD to move</p></div>
 
-    <!-- Use the standard JS version instead of the module version to avoid CORS issues -->
-    <script src="https://cdn.jsdelivr.net"></script>
+  <h1>Multiplayer Shooter Game</h1>
 
-    <script>
-        // Initialize Scene
-        const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB);
-        const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
-        const renderer = new THREE.WebGLRenderer({ antialias: true });
-        renderer.setSize(window.innerWidth, window.innerHeight);
-        document.body.appendChild(renderer.domElement);
+  <div id="authBox">
+    <h3>Login / Sign Up</h3>
+    <input id="email" placeholder="Email">
+    <input id="password" placeholder="Password" type="password">
+    <br>
+    <button onclick="login()">Login</button>
+    <button onclick="signup()">Sign Up</button>
+  </div>
 
-        // Add Light (Crucial so objects aren't black)
-        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
-        scene.add(light);
+  <div id="friendsBox" style="display:none;">
+    <h3>Friends</h3>
+    <ul id="friendsList"></ul>
+    <input id="friendEmail" placeholder="Friend Email">
+    <button onclick="addFriend()">Add Friend</button>
+  </div>
 
-        // Create Voxel Ground
-        const geometry = new THREE.BoxGeometry(100, 1, 100);
-        const material = new THREE.MeshPhongMaterial({ color: 0x228B22 });
-        const ground = new THREE.Mesh(geometry, material);
-        ground.position.y = -0.5;
-        scene.add(ground);
+  <canvas id="gameCanvas" width="900" height="600"></canvas>
 
-        // Player starting position
-        camera.position.set(0, 1.6, 5);
+  <script>
+    // ====== Firebase Setup ======
+    const firebaseConfig = {
+      apiKey: "YOUR_API_KEY",
+      authDomain: "YOUR_AUTH_DOMAIN",
+      projectId: "YOUR_PROJECT_ID",
+      storageBucket: "YOUR_STORAGE_BUCKET",
+      messagingSenderId: "YOUR_MESSAGING_SENDER_ID",
+      appId: "YOUR_APP_ID"
+    };
+    firebase.initializeApp(firebaseConfig);
+    const auth = firebase.auth();
+    const db = firebase.firestore();
 
-        // Movement variables
-        let keys = {};
-        document.addEventListener('keydown', (e) => keys[e.code] = true);
-        document.addEventListener('keyup', (e) => keys[e.code] = false);
+    // ====== Auth Functions ======
+    function login() {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      auth.signInWithEmailAndPassword(email, pass)
+        .then(() => { document.getElementById("authBox").style.display="none"; document.getElementById("friendsBox").style.display="block"; })
+        .catch(alert);
+    }
 
-        // Pointer Lock
-        document.body.addEventListener('click', () => document.body.requestPointerLock());
+    function signup() {
+      const email = document.getElementById("email").value;
+      const pass = document.getElementById("password").value;
+      auth.createUserWithEmailAndPassword(email, pass)
+        .then(() => {
+          db.collection("friends").doc(email).set({ list: [] });
+          alert("Account created!");
+        })
+        .catch(alert);
+    }
 
-        function animate() {
-            requestAnimationFrame(animate);
-            
-            // Simple Movement Logic
-            if (document.pointerLockElement === document.body) {
-                if (keys['KeyW']) camera.translateZ(-0.1);
-                if (keys['KeyS']) camera.translateZ(0.1);
-                if (keys['KeyA']) camera.translateX(-0.1);
-                if (keys['KeyD']) camera.translateX(0.1);
-                camera.position.y = 1.6; // Keep height steady
-            }
+    // ====== Friends Functions ======
+    auth.onAuthStateChanged(user => {
+      if (!user) return;
+      db.collection("friends").doc(user.email).onSnapshot(doc => {
+        const list = doc.data().list || [];
+        const ul = document.getElementById("friendsList");
+        ul.innerHTML = "";
+        list.forEach(f => { const li = document.createElement("li"); li.textContent = f; ul.appendChild(li); });
+      });
+    });
 
-            renderer.render(scene, camera);
-        }
-        animate();
+    function addFriend() {
+      const friend = document.getElementById("friendEmail").value;
+      const user = auth.currentUser;
+      db.collection("friends").doc(user.email).update({
+        list: firebase.firestore.FieldValue.arrayUnion(friend)
+      });
+      document.getElementById("friendEmail").value = "";
+    }
 
-        // Fix resize
-        window.addEventListener('resize', () => {
-            camera.aspect = window.innerWidth / window.innerHeight;
-            camera.updateProjectionMatrix();
-            renderer.setSize(window.innerWidth, window.innerHeight);
-        });
-    </script>
+    // ====== Game Logic ======
+    const canvas = document.getElementById("gameCanvas");
+    const ctx = canvas.getContext("2d");
+
+    let player = { x: 450, y: 300, speed: 4, bullets: [] };
+    let keys = {};
+
+    document.addEventListener("keydown", e => keys[e.key.toLowerCase()] = true);
+    document.addEventListener("keyup", e => keys[e.key.toLowerCase()] = false);
+
+    canvas.addEventListener("click", e => {
+      const rect = canvas.getBoundingClientRect();
+      player.bullets.push({
+        x: player.x, y: player.y,
+        dx: (e.clientX - rect.left - player.x)/20,
+        dy: (e.clientY - rect.top - player.y)/20
+      });
+    });
+
+    function update() {
+      if (keys["w"]) player.y -= player.speed;
+      if (keys["s"]) player.y += player.speed;
+      if (keys["a"]) player.x -= player.speed;
+      if (keys["d"]) player.x += player.speed;
+
+      player.bullets.forEach(b => { b.x += b.dx; b.y += b.dy; });
+      player.bullets = player.bullets.filter(b => b.x>=0 && b.x<=canvas.width && b.y>=0 && b.y<=canvas.height);
+    }
+
+    function draw() {
+      ctx.clearRect(0, 0, canvas.width, canvas.height);
+      ctx.fillStyle = "blue"; ctx.fillRect(player.x-10, player.y-10, 20, 20);
+      ctx.fillStyle = "black";
+      player.bullets.forEach(b => ctx.fillRect(b.x, b.y, 5, 5));
+    }
+
+    function loop() { update(); draw(); requestAnimationFrame(loop); }
+    loop();
+  </script>
 </body>
 </html>
