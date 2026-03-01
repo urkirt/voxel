@@ -3,114 +3,66 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>Voxel Shooter - Poxel Style</title>
+    <title>Voxel Game - Fixed</title>
     <style>
-        body { margin: 0; overflow: hidden; background: #000; font-family: sans-serif; }
-        #ui { position: absolute; top: 20px; left: 20px; color: white; text-shadow: 2px 2px #000; }
-        #crosshair { position: absolute; top: 50%; left: 50%; width: 10px; height: 10px; border: 2px solid white; border-radius: 50%; transform: translate(-50%, -50%); pointer-events: none; }
+        body { margin: 0; overflow: hidden; background: #000; }
+        #ui { position: absolute; top: 10px; left: 10px; color: white; font-family: sans-serif; pointer-events: none; }
     </style>
 </head>
 <body>
-    <div id="ui">
-        <h1>Voxel Combat</h1>
-        <p>WASD to Move | Click to Lock Mouse | ESC to Exit</p>
-    </div>
-    <div id="crosshair"></div>
+    <div id="ui"><h1>Voxel Shooter</h1><p>Click to start | WASD to move</p></div>
 
-    <!-- Include Three.js from a CDN -->
-    <script type="importmap">
-      { "imports": { "three": "https://unpkg.com" } }
-    </script>
+    <!-- Use the standard JS version instead of the module version to avoid CORS issues -->
+    <script src="https://cdn.jsdelivr.net"></script>
 
-    <script type="module">
-        import * as THREE from 'three';
-
-        // 1. Scene Setup
+    <script>
+        // Initialize Scene
         const scene = new THREE.Scene();
-        scene.background = new THREE.Color(0x87CEEB); // Sky blue
+        scene.background = new THREE.Color(0x87CEEB);
         const camera = new THREE.PerspectiveCamera(75, window.innerWidth / window.innerHeight, 0.1, 1000);
         const renderer = new THREE.WebGLRenderer({ antialias: true });
         renderer.setSize(window.innerWidth, window.innerHeight);
         document.body.appendChild(renderer.domElement);
 
-        // 2. Lighting
-        const light = new THREE.AmbientLight(0x404040); 
+        // Add Light (Crucial so objects aren't black)
+        const light = new THREE.HemisphereLight(0xffffff, 0x444444, 1.5);
         scene.add(light);
-        const sun = new THREE.DirectionalLight(0xffffff, 1);
-        sun.position.set(10, 20, 10);
-        scene.add(sun);
 
-        // 3. Environment (The Ground)
-        const planeGeo = new THREE.PlaneGeometry(100, 100);
-        const planeMat = new THREE.MeshPhongMaterial({ color: 0x3a9d23 }); // Green voxel grass
-        const ground = new THREE.Mesh(planeGeo, planeMat);
-        ground.rotation.x = -Math.PI / 2;
+        // Create Voxel Ground
+        const geometry = new THREE.BoxGeometry(100, 1, 100);
+        const material = new THREE.MeshPhongMaterial({ color: 0x228B22 });
+        const ground = new THREE.Mesh(geometry, material);
+        ground.position.y = -0.5;
         scene.add(ground);
 
-        // 4. Random Voxel Obstacles
-        for(let i=0; i<20; i++) {
-            const boxGeo = new THREE.BoxGeometry(2, 2, 2);
-            const boxMat = new THREE.MeshPhongMaterial({ color: 0x8b4513 });
-            const box = new THREE.Mesh(boxGeo, boxMat);
-            box.position.set(Math.random()*40-20, 1, Math.random()*40-20);
-            scene.add(box);
-        }
+        // Player starting position
+        camera.position.set(0, 1.6, 5);
 
-        // 5. Controls Logic
-        let moveForward = false, moveBackward = false, moveLeft = false, moveRight = false;
-        const velocity = new THREE.Vector3();
-        const direction = new THREE.Vector3();
+        // Movement variables
+        let keys = {};
+        document.addEventListener('keydown', (e) => keys[e.code] = true);
+        document.addEventListener('keyup', (e) => keys[e.code] = false);
 
-        document.addEventListener('keydown', (e) => {
-            if(e.code === 'KeyW') moveForward = true;
-            if(e.code === 'KeyS') moveBackward = true;
-            if(e.code === 'KeyA') moveLeft = true;
-            if(e.code === 'KeyD') moveRight = true;
-        });
+        // Pointer Lock
+        document.body.addEventListener('click', () => document.body.requestPointerLock());
 
-        document.addEventListener('keyup', (e) => {
-            if(e.code === 'KeyW') moveForward = false;
-            if(e.code === 'KeyS') moveBackward = false;
-            if(e.code === 'KeyA') moveLeft = false;
-            if(e.code === 'KeyD') moveRight = false;
-        });
-
-        // Pointer Lock (FPS Camera)
-        document.body.addEventListener('click', () => {
-            document.body.requestPointerLock();
-        });
-
-        document.addEventListener('mousemove', (e) => {
-            if (document.pointerLockElement === document.body) {
-                camera.rotation.y -= e.movementX * 0.002;
-                camera.rotation.x -= e.movementY * 0.002;
-                camera.rotation.x = Math.max(-Math.PI/2, Math.min(Math.PI/2, camera.rotation.x));
-            }
-        });
-
-        camera.position.y = 1.6; // Eye level
-        camera.rotation.order = 'YXZ'; // Critical for FPS controls
-
-        // 6. Game Loop
         function animate() {
             requestAnimationFrame(animate);
-
+            
+            // Simple Movement Logic
             if (document.pointerLockElement === document.body) {
-                const speed = 0.15;
-                direction.z = Number(moveForward) - Number(moveBackward);
-                direction.x = Number(moveRight) - Number(moveLeft);
-                direction.normalize();
-
-                if (moveForward || moveBackward) camera.translateZ(-direction.z * speed);
-                if (moveLeft || moveRight) camera.translateX(direction.x * speed);
-                camera.position.y = 1.6; // Keep player on ground
+                if (keys['KeyW']) camera.translateZ(-0.1);
+                if (keys['KeyS']) camera.translateZ(0.1);
+                if (keys['KeyA']) camera.translateX(-0.1);
+                if (keys['KeyD']) camera.translateX(0.1);
+                camera.position.y = 1.6; // Keep height steady
             }
 
             renderer.render(scene, camera);
         }
         animate();
 
-        // Handle Resize
+        // Fix resize
         window.addEventListener('resize', () => {
             camera.aspect = window.innerWidth / window.innerHeight;
             camera.updateProjectionMatrix();
